@@ -10,9 +10,8 @@ wheels/
 .venv
 
 # Data
-Data/raw
-Data/intermediate
+Data/
 
 # Papers
-Papers
+Papers/
 *.pdf
