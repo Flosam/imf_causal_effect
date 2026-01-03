@@ -49,6 +49,9 @@ def clean_vdem(df:pd.DataFrame) -> pd.DataFrame:
     # remove NaNs in polyarchy
     df = df[~df['v2x_polyarchy'].isna()]
 
+    # rename columns for consistency
+    df = df.rename(columns={'COWcode':'ccode_cow'})
+
     return df
 
 
@@ -73,7 +76,7 @@ def clean_gwf(df:pd.DataFrame) -> pd.DataFrame:
 # clean world bank data
 def clean_wb(df:pd.DataFrame) -> pd.DataFrame:
     # rename columns
-    df = df.rename(columns={'date':'year','id':'country_code'})
+    df = df.rename(columns={'date':'year','id':'country_text_id'})
 
     # make year as int
     df['year'] = df['year'].astype(int)
@@ -86,6 +89,9 @@ def clean_pwt(df:pd.DataFrame) -> pd.DataFrame:
     # keep only relevant columns
     cols = ['year','countrycode','rgdpe','pop','emp','pl_m','pl_c','xr']
     df = df[cols]
+
+    # rename column for consistency
+    df = df.rename(columns={'countrycode':'country_text_id'})
 
     return df
 
@@ -122,3 +128,30 @@ def clean_mepv(df:pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# Clean Final Dataset prior to modelling
+def clean_main(df:pd.DataFrame, 
+               features:list, 
+               regions:bool = True, 
+               years:bool = True,
+               remove_rich:bool = True) -> pd.DataFrame:
+    # keep only columns used as features
+    # check if we want region and year dummies
+    if regions:
+        region_cols = list(df.columns[df.columns.str.contains('region_')])
+        features = features + region_cols
+
+    if years:
+        year_cols = list(df.columns[df.columns.str.contains('year_')])
+        features = features + year_cols
+
+    ids = ['year', 'ccode_cow', 'cname_imf']
+    df = df[ids + features]
+
+    # Remove countries from rich regions if bool
+    if remove_rich:
+        df = df[(df['region_North America'] == 0) & (df['region_Europe & Central Asia'] == 0)]
+
+    # remove rows with NaNs
+    df = df.dropna(how='any')
+
+    return df

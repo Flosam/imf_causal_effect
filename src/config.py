@@ -3,8 +3,25 @@ START_DATE = 1971
 END_DATE = 2007
 ECON_LAG = 1
 
-# raw data path
+# features wanted for modelling
+OUTCOME = 'v2x_polyarchy'
+TREATMENT = 'imf_prog'
+CONTROLS = ['num_aut_trans',
+            'gwf_military',
+            'gwf_monarch',
+            'wbi_total_reserves2gni_l1',
+            'l_rgdpe_pc_l1',
+            'ld_rgdpe_pc_l1',
+            'oil_exporter',
+            'imf_curr_crash',
+            'ACTOTAL']
+FEATURES = [OUTCOME, TREATMENT] + CONTROLS
+
+
+
+# data path
 RAW_DATA = 'Data/raw/'
+INT_DATA = 'Data/intermediate'
 
 # World bank data indicators
 WB_INDICATORS = {

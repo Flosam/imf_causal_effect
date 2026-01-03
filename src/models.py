@@ -3,8 +3,14 @@ import numpy as np
 from sklearn.model_selection import KFold
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LogisticRegression
+import pandas as pd
 
-def dr_learner(X:np.array, t:np.array, y:np.array) -> np.array:
+def dr_learner(data:pd.DataFrame) -> np.array:
+    # get outcome, treatment and controls from data
+    y = data.iloc[:,3].to_numpy()
+    t = data.iloc[:,4].to_numpy()
+    X = data.iloc[:,5:].to_numpy()
+
     n = len(y)
     n_split = 3
 
