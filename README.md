@@ -100,13 +100,32 @@ This separation avoids leakage and improves interpretability.
 
 ---
 
+## Results
+After cleaning the datasets, computing the features, and merging it all into one main dataset, we select only the relevant features and keep only non-empty rows. This is what our final dataset looks like:
+
+![Final Dataset Distribution](plots/final_summary.png)
+
+We see that the total number of causal units is above 60 over our whole sample, going as high as 120 countries per year. Out of those datapoints, around 1/3 have received the treatment at all time, giving us enough data on both controls and treated.
+
+The estimated conditional average treatment effects are distributed around 0, which suggest that there is no strong effect of joining an IMF program on democracy.
+
+![Distribution of conditional treatment effects](plots/hte_distribution.png)
+
+However, conditioning on their democracy score, we see a negative relationship between conditional treatment effect and democracy:
+
+![Conditional treatment effects on v2x_polyarchy](plots/hte_polyarchy.png)
+
+While the effect is not very significant, we can observe a weak positive effect on democracy among the countries with worse democracy score, meaning that IMF program might have a small democratization effect on the worse autocracies.
+
+---
+
 ## Data Documentation Template
 
 Each dataset included in the project follows the template below.
 
 ---
 
-### Dataset: *[Name]*
+### Dataset: *IMF Arrangements Data*
 
 **Source**  
 - Provider:  
