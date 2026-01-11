@@ -130,7 +130,9 @@ def clean_mepv(df:pd.DataFrame) -> pd.DataFrame:
 
 # Clean Final Dataset prior to modelling
 def clean_main(df:pd.DataFrame, 
-               features:list, 
+               controls:list,
+               treatment:str,
+               outcome:str, 
                regions:bool = True, 
                years:bool = True,
                remove_rich:bool = True) -> pd.DataFrame:
@@ -138,14 +140,14 @@ def clean_main(df:pd.DataFrame,
     # check if we want region and year dummies
     if regions:
         region_cols = list(df.columns[df.columns.str.contains('region_')])
-        features = features + region_cols
+        controls = controls + region_cols
 
     if years:
         year_cols = list(df.columns[df.columns.str.contains('year_')])
-        features = features + year_cols
+        controls = controls + year_cols
 
     ids = ['year', 'ccode_cow', 'cname_imf']
-    df = df[ids + features]
+    df = df[ids + outcome + treatment + controls]
 
     # Remove countries from rich regions if bool
     if remove_rich:
@@ -154,4 +156,4 @@ def clean_main(df:pd.DataFrame,
     # remove rows with NaNs
     df = df.dropna(how='any')
 
-    return df
+    return df, controls
