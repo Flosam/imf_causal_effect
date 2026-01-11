@@ -1,11 +1,6 @@
 import numpy as np
 import pandas as pd
-try:
-    import graphviz
-    _HAS_GRAPHVIZ = True
-except Exception:
-    graphviz = None
-    _HAS_GRAPHVIZ = False
+# Note: Graphviz support removed — plotting uses Matplotlib in `src.plots.plot_causal_tree`.
 
 class Node:
     def __init__(self, depth, tau=None, feature=None, threshold=None, left=None, right=None, n_samples=0):
@@ -248,59 +243,6 @@ class CausalTree:
             })
         return pd.DataFrame(records)
 
-    def to_dot(self, feature_names=None):
-        """
-        Return a DOT format string representing the tree (Graphviz).
-        """
-        if self.root is None:
-            return "digraph G { }"
-
-        lines = ['digraph Tree {', 'node [shape=box, style="filled", fontsize=10, fontname="Helvetica"];']
-
-        def _rec(node, nid_counter=[0]):
-            nid = f"node{nid_counter[0]}"
-            nid_counter[0] += 1
-
-            if node.is_leaf:
-                tau_str = node.tau if node.tau is not None else 'nan'
-                label = f"Leaf\n n={node.n_samples}\n tau={tau_str}"
-                lines.append(f'{nid} [label="{label}", fillcolor="#f8cecc"];')
-                return nid
-            else:
-                fname = feature_names[node.feature] if (feature_names is not None and node.feature is not None) else f"X[{node.feature}]"
-                label = f"{fname} <= {node.threshold:.3f}\n n={node.n_samples}"
-                lines.append(f'{nid} [label="{label}", fillcolor="#c6dbef"];')
-                left = _rec(node.left, nid_counter)
-                right = _rec(node.right, nid_counter)
-                lines.append(f'{nid} -> {left} [label="yes"];')
-                lines.append(f'{nid} -> {right} [label="no"];')
-                return nid
-
-        _rec(self.root)
-        lines.append('}')
-        return "\n".join(lines)
-
-    def to_graphviz(self, feature_names=None):
-        """
-        Return a graphviz.Source object representing the tree.
-        Requires the Python 'graphviz' package (and Graphviz system binary when rendering).
-        """
-        dot = self.to_dot(feature_names=feature_names)
-        if not _HAS_GRAPHVIZ:
-            raise ImportError("graphviz is not available (pip install graphviz and ensure Graphviz is installed). Use to_dot() to get the DOT string.")
-        return graphviz.Source(dot)
-
-    def plot_tree(self, filename=None, feature_names=None, format='png', cleanup=True):
-        """
-        Render and save the tree to a file if filename is provided.
-        If no filename is provided, returns a graphviz.Source object (if graphviz is available).
-        """
-        dot = self.to_dot(feature_names=feature_names)
-        if not _HAS_GRAPHVIZ:
-            raise ImportError("graphviz is not available. Install the python package 'graphviz' and the system Graphviz binaries to render.")
-        src = graphviz.Source(dot)
-        if filename:
-            src.format = format
-            outpath = src.render(filename, cleanup=cleanup)
-            return outpath
-        return src
+    # Graphviz-related methods removed.
+    # Use `to_dataframe()` / `collect_nodes()` for programmatic inspection and
+    # use `src.plots.plot_causal_tree` for plotting with Matplotlib.

@@ -125,8 +125,16 @@ def plot_causal_tree(ct, filename=None, feature_names=None, figsize=(10, 6)):
             label = f"Leaf\nn={node.n_samples}\ntau={node.tau if node.tau is not None else 'nan'}"
             bbox = dict(boxstyle="round,pad=0.3", fc="#f8cecc", ec="k")
         else:
-            fname = feature_names[node.feature] if (feature_names is not None and node.feature is not None) else f"X[{node.feature}]"
-            label = f"{fname} <= {node.threshold:.3f}\nn={node.n_samples}"
+            # safe feature name lookup (guard against short/missing feature_names)
+            if feature_names is not None and node.feature is not None:
+                try:
+                    fname = feature_names[node.feature]
+                except Exception:
+                    fname = f"X[{node.feature}]"
+            else:
+                fname = f"X[{node.feature}]"
+            thr = f"{node.threshold:.3f}" if node.threshold is not None else "nan"
+            label = f"{fname} <= {thr}\nn={node.n_samples}"
             bbox = dict(boxstyle="round,pad=0.3", fc="#c6dbef", ec="k")
         ax.text(x, y, label, ha='center', va='center', bbox=bbox, fontsize=9)
 
@@ -146,46 +154,13 @@ def plot_causal_tree(ct, filename=None, feature_names=None, figsize=(10, 6)):
 
 def render_causal_tree(ct, filename_prefix='Plots/causal_tree', feature_names=None):
     """
-    Try to render and display the causal tree. Preference order:
-      1. Graphviz (display inline via IPython.display if available, then save PNG)
-      2. Write DOT file for manual rendering
-      3. Matplotlib fallback (display inline and save PNG)
+    Render and save the causal tree using Matplotlib fallback only (Graphviz support removed).
 
-    Returns the graphviz.Source object if displayed with Graphviz and rendering
-    to a file failed, or returns the path to the saved artifact (PNG or DOT).
+    Returns the path to the saved PNG file.
     """
     Path('Plots').mkdir(parents=True, exist_ok=True)
+    import matplotlib.pyplot as plt
 
-    # Try Graphviz first: get Source and display inline if possible
-    try:
-        src = ct.to_graphviz(feature_names=feature_names)
-        try:
-            from IPython.display import display
-            display(src)
-        except Exception:
-            # Not running in IPython or display not available
-            pass
-
-        # attempt to render to file (needs system graphviz)
-        try:
-            src.format = 'png'
-            out = src.render(filename_prefix, cleanup=True)
-            print(f"Causal tree rendered to '{out}' using Graphviz")
-            return out
-        except Exception as e_render:
-            print(f"Graphviz render failed (could not write file): {e_render}. The graph may have been displayed inline if running interactively.")
-            return src
-    except Exception as e:
-        print(f"Graphviz not available or failed: {e}")
-
-    # write dot file for manual rendering
-    dot = ct.to_dot(feature_names=feature_names)
-    dot_path = f"{filename_prefix}.dot"
-    with open(dot_path, 'w') as f:
-        f.write(dot)
-    print(f"Wrote DOT to '{dot_path}'. Attempting Matplotlib fallback and inline display.")
-
-    # Matplotlib fallback: create a figure, display inline, then save to file
     try:
         fig = plot_causal_tree(ct, filename=None, feature_names=feature_names)
         # display inline if possible
@@ -193,13 +168,14 @@ def render_causal_tree(ct, filename_prefix='Plots/causal_tree', feature_names=No
             from IPython.display import display
             display(fig)
         except Exception:
-            import matplotlib.pyplot as plt
             plt.show()
 
         png_path = f"{filename_prefix}_matplotlib.png"
         fig.savefig(png_path)
-        print(f"Matplotlib fallback rendered and saved to '{png_path}'")
+        plt.close(fig)
+        print(f"Causal tree rendered and saved to '{png_path}' using Matplotlib")
         return png_path
-    except Exception as e2:
-        print(f"Matplotlib fallback also failed: {e2}")
-        return dot_path
+    except Exception as e:
+        print(f"Failed to render causal tree with Matplotlib: {e}")
+        raise
+

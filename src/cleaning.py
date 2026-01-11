@@ -147,7 +147,11 @@ def clean_main(df:pd.DataFrame,
         controls = controls + year_cols
 
     ids = ['year', 'ccode_cow', 'cname_imf']
-    df = df[ids + outcome + treatment + controls]
+    df = df[ids + [outcome, treatment] + controls]
+
+    # Remove problematic years that have no treated observations (e.g., 1975)
+    # This avoids structural non-overlap that causes extreme propensity estimates.
+    df = df[df['year'] != 1975]
 
     # Remove countries from rich regions if bool
     if remove_rich:

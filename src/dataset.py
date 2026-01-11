@@ -44,7 +44,7 @@ def create_dataset():
 
         # Add additional cross-datasets features
         main = add_oil_export_dummy(main)
-        main = add_year_dummies(main)
+        main = add_year_dummies(main, bin_size=3)
         print('Cross-data features have been added')
 
         return main

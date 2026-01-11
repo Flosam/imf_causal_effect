@@ -1,7 +1,7 @@
 ## Create additional features in datasets
 import pandas as pd
 import numpy as np
-from src.config import ECON_LAG, WB_INDICATORS
+from src.config import ECON_LAG, WB_INDICATORS, START_DATE
 from src.utils import count_transitions, opec_dummy, weo_dummy
 
 ############################################################################
@@ -140,11 +140,28 @@ def add_curr_crash_dummy(df:pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# add year dummies
-def add_year_dummies(df:pd.DataFrame) -> pd.DataFrame:
-    # create dummies
-    year_dummies = pd.get_dummies(df['year'], prefix='year').astype(int)
-    # drop 1 dummy for base case
-    year_dummies = year_dummies.iloc[:,1:]
-    df = pd.concat([df,year_dummies], axis=1)
+# add year dummies (supports pooling into multi-year bins)
+def add_year_dummies(df:pd.DataFrame, bin_size:int=1) -> pd.DataFrame:
+    """
+    Add year dummies. If `bin_size` > 1, pool years into bins of width `bin_size` (e.g., 3)
+    and create dummies for the bins. Dummies are prefixed 'year_' and the first dummy is dropped.
+    """
+    if bin_size <= 1:
+        year_dummies = pd.get_dummies(df['year'], prefix='year').astype(int)
+        # drop 1 dummy for base case
+        year_dummies = year_dummies.iloc[:,1:]
+        df = pd.concat([df, year_dummies], axis=1)
+        return df
+
+    # bin years into multi-year bins anchored at START_DATE
+    min_year = START_DATE
+    bin_start = ((df['year'] - min_year) // bin_size) * bin_size + min_year
+    bin_label = bin_start.astype(str) + '-' + (bin_start + bin_size - 1).astype(str)
+    df['year_bin_label'] = bin_label
+    year_dummies = pd.get_dummies(df['year_bin_label'], prefix='year').astype(int)
+    # drop 1 dummy for base case (only if more than one bin)
+    if year_dummies.shape[1] > 1:
+        year_dummies = year_dummies.iloc[:,1:]
+    df = pd.concat([df, year_dummies], axis=1)
+    df.drop(columns=['year_bin_label'], inplace=True)
     return df
