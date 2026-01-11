@@ -7,7 +7,7 @@ from src.cleaning import *
 from src.features import *
 from src.config import RAW_DATA,INT_DATA,WB_INDICATORS,FEATURES
 from src.merge import merge_all
-from src.models import dr_learner
+from src.doubleML import dr_learner
 from src.plots import *
 
 def run_analysis(results_path, dataset_path = None):
