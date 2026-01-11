@@ -1,4 +1,5 @@
 ## functions for plotting
+from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -58,3 +59,147 @@ def plot_final_summary(df:pd.DataFrame, path:str) -> None:
     plt.savefig(path)
     print("=============================")
     print()
+
+
+def plot_causal_tree(ct, filename=None, feature_names=None, figsize=(10, 6)):
+    """
+    Render a simple tree plot using Matplotlib. This is a lightweight fallback
+    when Graphviz is not available. The layout places leaves left-to-right and
+    parents centered above their children.
+    Parameters
+    - ct: CausalTree instance
+    - filename: if provided, saves the figure to this path (png recommended)
+    - feature_names: optional list of feature names
+    """
+    import matplotlib.pyplot as plt
+
+    if ct.root is None:
+        raise ValueError("Tree is empty")
+
+    pos = {}
+    # counter for assigning x coordinates to leaves
+    leaf_counter = {'x': 0}
+
+    def _layout(node, depth=0):
+        if node is None:
+            return None, None
+        if node.is_leaf:
+            x = leaf_counter['x']
+            pos[node] = (x, -depth)
+            leaf_counter['x'] += 1
+            return x, x
+        left_min, left_max = _layout(node.left, depth+1)
+        right_min, right_max = _layout(node.right, depth+1)
+        # handle degenerate cases
+        if left_min is None and right_min is None:
+            x = leaf_counter['x']
+            pos[node] = (x, -depth)
+            leaf_counter['x'] += 1
+            return x, x
+        if left_min is None:
+            x = right_min
+        elif right_min is None:
+            x = left_max
+        else:
+            x = 0.5 * (left_min + right_max)
+        pos[node] = (x, -depth)
+        min_x = left_min if left_min is not None else x
+        max_x = right_max if right_max is not None else x
+        return min_x, max_x
+
+    _layout(ct.root)
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # draw edges and nodes
+    for node, (x, y) in pos.items():
+        if not node.is_leaf:
+            for child in (node.left, node.right):
+                if child is None:
+                    continue
+                cx, cy = pos[child]
+                ax.plot([x, cx], [y, cy], color='k', linewidth=1)
+
+    for node, (x, y) in pos.items():
+        if node.is_leaf:
+            label = f"Leaf\nn={node.n_samples}\ntau={node.tau if node.tau is not None else 'nan'}"
+            bbox = dict(boxstyle="round,pad=0.3", fc="#f8cecc", ec="k")
+        else:
+            fname = feature_names[node.feature] if (feature_names is not None and node.feature is not None) else f"X[{node.feature}]"
+            label = f"{fname} <= {node.threshold:.3f}\nn={node.n_samples}"
+            bbox = dict(boxstyle="round,pad=0.3", fc="#c6dbef", ec="k")
+        ax.text(x, y, label, ha='center', va='center', bbox=bbox, fontsize=9)
+
+    ax.set_axis_off()
+    # set x limits with small margin
+    if leaf_counter['x'] > 0:
+        ax.set_xlim(-0.5, leaf_counter['x'] - 0.5)
+
+    plt.tight_layout()
+    if filename:
+        Path(filename).parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(filename)
+        plt.close(fig)
+        return filename
+    return fig
+
+
+def render_causal_tree(ct, filename_prefix='Plots/causal_tree', feature_names=None):
+    """
+    Try to render and display the causal tree. Preference order:
+      1. Graphviz (display inline via IPython.display if available, then save PNG)
+      2. Write DOT file for manual rendering
+      3. Matplotlib fallback (display inline and save PNG)
+
+    Returns the graphviz.Source object if displayed with Graphviz and rendering
+    to a file failed, or returns the path to the saved artifact (PNG or DOT).
+    """
+    Path('Plots').mkdir(parents=True, exist_ok=True)
+
+    # Try Graphviz first: get Source and display inline if possible
+    try:
+        src = ct.to_graphviz(feature_names=feature_names)
+        try:
+            from IPython.display import display
+            display(src)
+        except Exception:
+            # Not running in IPython or display not available
+            pass
+
+        # attempt to render to file (needs system graphviz)
+        try:
+            src.format = 'png'
+            out = src.render(filename_prefix, cleanup=True)
+            print(f"Causal tree rendered to '{out}' using Graphviz")
+            return out
+        except Exception as e_render:
+            print(f"Graphviz render failed (could not write file): {e_render}. The graph may have been displayed inline if running interactively.")
+            return src
+    except Exception as e:
+        print(f"Graphviz not available or failed: {e}")
+
+    # write dot file for manual rendering
+    dot = ct.to_dot(feature_names=feature_names)
+    dot_path = f"{filename_prefix}.dot"
+    with open(dot_path, 'w') as f:
+        f.write(dot)
+    print(f"Wrote DOT to '{dot_path}'. Attempting Matplotlib fallback and inline display.")
+
+    # Matplotlib fallback: create a figure, display inline, then save to file
+    try:
+        fig = plot_causal_tree(ct, filename=None, feature_names=feature_names)
+        # display inline if possible
+        try:
+            from IPython.display import display
+            display(fig)
+        except Exception:
+            import matplotlib.pyplot as plt
+            plt.show()
+
+        png_path = f"{filename_prefix}_matplotlib.png"
+        fig.savefig(png_path)
+        print(f"Matplotlib fallback rendered and saved to '{png_path}'")
+        return png_path
+    except Exception as e2:
+        print(f"Matplotlib fallback also failed: {e2}")
+        return dot_path

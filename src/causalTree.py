@@ -1,7 +1,14 @@
 import numpy as np
+import pandas as pd
+try:
+    import graphviz
+    _HAS_GRAPHVIZ = True
+except Exception:
+    graphviz = None
+    _HAS_GRAPHVIZ = False
 
 class Node:
-    def __init__(self, depth, tau=0.0, feature=None, threshold=None, left=None, right=None, n_samples=0):
+    def __init__(self, depth, tau=None, feature=None, threshold=None, left=None, right=None, n_samples=0):
         self.tau = tau
         self.feature = feature
         self.threshold = threshold
@@ -53,8 +60,8 @@ class CausalTree:
     
     def traverse_tree(self, x, node):
         if node.is_leaf:
-            return node.tau_hat
-        if x[node.feature] <= node.treshold:
+            return node.tau
+        if x[node.feature] <= node.threshold:
             return self.traverse_tree(x, node.left)
         return self.traverse_tree(x, node.right)
     
@@ -137,6 +144,7 @@ class CausalTree:
     
     def build_tree(self, x_tr, y_tr, w_tr, n_tr, p, depth, max_depth, min_leaf):
         node = Node(depth)
+        node.n_samples = x_tr.shape[0]
 
         if depth >= max_depth:
             node.is_leaf = True
@@ -159,21 +167,140 @@ class CausalTree:
         return node
     
     def estimate_honest_values(self, node, x_est, y_est, w_est):
+        if node is None:
+            return
+
         if node.is_leaf:
-            # calculate CATE using estiamtion sample
-            y1 = x_est[w_est==1]
-            y0 = x_est[w_est==0]   
+            # calculate CATE using estimation sample
+            y1 = y_est[w_est==1]
+            y0 = y_est[w_est==0]
 
             if len(y1) > 0 and len(y0) > 0:
-                node.tau_hat = np.mean(y1) - np.mean(y0)
+                node.tau = np.mean(y1) - np.mean(y0)
             else:
-                node.tau_hat = 0.0
-            return 
-        
+                node.tau = np.nan
+            return
+
         # if not leaf, pass down to children
         idx_left = x_est[:, node.feature] <= node.threshold
         self.estimate_honest_values(node.left, x_est[idx_left], y_est[idx_left], w_est[idx_left])
         self.estimate_honest_values(node.right, x_est[~idx_left], y_est[~idx_left], w_est[~idx_left])
 
-    
-    
+    def collect_nodes(self):
+        """
+        Return a list of dictionaries with information for each node:
+        feature, threshold, tau, n_samples, depth, is_leaf
+        """
+        nodes = []
+        def _rec(node):
+            if node is None:
+                return
+            nodes.append({
+                'feature': node.feature,
+                'threshold': node.threshold,
+                'tau': getattr(node, 'tau', None),
+                'n_samples': node.n_samples,
+                'depth': node.depth,
+                'is_leaf': node.is_leaf
+            })
+            if not node.is_leaf:
+                _rec(node.left)
+                _rec(node.right)
+        _rec(self.root)
+        return nodes
+
+    def print_tree(self, feature_names=None):
+        """
+        Pretty-print the tree structure. If feature_names is provided (list),
+        it will use them; otherwise, it will use `X[i]`.
+        """
+        if self.root is None:
+            print("Empty tree")
+            return
+
+        def _rec(node):
+            indent = "  " * node.depth
+            if node.is_leaf:
+                print(f"{indent}Leaf depth={node.depth} n={node.n_samples} tau={node.tau}")
+                return
+            fname = feature_names[node.feature] if (feature_names is not None and node.feature is not None) else f"X[{node.feature}]"
+            print(f"{indent}Node depth={node.depth} {fname} <= {node.threshold} n={node.n_samples}")
+            _rec(node.left)
+            _rec(node.right)
+
+        _rec(self.root)
+
+    def to_dataframe(self, feature_names=None):
+        """
+        Return a pandas DataFrame summarizing nodes (one row per node).
+        """
+        records = []
+        for n in self.collect_nodes():
+            f = n['feature']
+            fname = feature_names[f] if (feature_names is not None and f is not None) else (f"X[{f}]" if f is not None else None)
+            records.append({
+                'feature': fname,
+                'threshold': n['threshold'],
+                'tau': n['tau'],
+                'n_samples': n['n_samples'],
+                'depth': n['depth'],
+                'is_leaf': n['is_leaf']
+            })
+        return pd.DataFrame(records)
+
+    def to_dot(self, feature_names=None):
+        """
+        Return a DOT format string representing the tree (Graphviz).
+        """
+        if self.root is None:
+            return "digraph G { }"
+
+        lines = ['digraph Tree {', 'node [shape=box, style="filled", fontsize=10, fontname="Helvetica"];']
+
+        def _rec(node, nid_counter=[0]):
+            nid = f"node{nid_counter[0]}"
+            nid_counter[0] += 1
+
+            if node.is_leaf:
+                tau_str = node.tau if node.tau is not None else 'nan'
+                label = f"Leaf\n n={node.n_samples}\n tau={tau_str}"
+                lines.append(f'{nid} [label="{label}", fillcolor="#f8cecc"];')
+                return nid
+            else:
+                fname = feature_names[node.feature] if (feature_names is not None and node.feature is not None) else f"X[{node.feature}]"
+                label = f"{fname} <= {node.threshold:.3f}\n n={node.n_samples}"
+                lines.append(f'{nid} [label="{label}", fillcolor="#c6dbef"];')
+                left = _rec(node.left, nid_counter)
+                right = _rec(node.right, nid_counter)
+                lines.append(f'{nid} -> {left} [label="yes"];')
+                lines.append(f'{nid} -> {right} [label="no"];')
+                return nid
+
+        _rec(self.root)
+        lines.append('}')
+        return "\n".join(lines)
+
+    def to_graphviz(self, feature_names=None):
+        """
+        Return a graphviz.Source object representing the tree.
+        Requires the Python 'graphviz' package (and Graphviz system binary when rendering).
+        """
+        dot = self.to_dot(feature_names=feature_names)
+        if not _HAS_GRAPHVIZ:
+            raise ImportError("graphviz is not available (pip install graphviz and ensure Graphviz is installed). Use to_dot() to get the DOT string.")
+        return graphviz.Source(dot)
+
+    def plot_tree(self, filename=None, feature_names=None, format='png', cleanup=True):
+        """
+        Render and save the tree to a file if filename is provided.
+        If no filename is provided, returns a graphviz.Source object (if graphviz is available).
+        """
+        dot = self.to_dot(feature_names=feature_names)
+        if not _HAS_GRAPHVIZ:
+            raise ImportError("graphviz is not available. Install the python package 'graphviz' and the system Graphviz binaries to render.")
+        src = graphviz.Source(dot)
+        if filename:
+            src.format = format
+            outpath = src.render(filename, cleanup=cleanup)
+            return outpath
+        return src
